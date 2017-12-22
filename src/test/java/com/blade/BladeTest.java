@@ -3,7 +3,7 @@ package com.blade;
 import com.blade.event.EventType;
 import com.blade.mvc.ui.template.DefaultEngine;
 import com.blade.types.BladeBeanDefineType;
-import netty_hello.Hello;
+import io.example.blog.model.Hello;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -20,7 +20,7 @@ public class BladeTest extends BaseTestCase {
 
     @Test
     public void testStart() {
-        app.start(Hello.class, null);
+        app.start(Hello.class, (String[]) null);
     }
 
     @Test
@@ -30,12 +30,10 @@ public class BladeTest extends BaseTestCase {
         );
     }
 
-    @Test
+//    @Test
     public void testStartedEvent() {
         start(
-                app.event(EventType.SERVER_STARTED, (e) -> {
-                    System.out.println("服务已经启动成功.");
-                })
+                app.event(EventType.SERVER_STARTED, (e) -> System.out.println("服务已经启动成功."))
         );
     }
 

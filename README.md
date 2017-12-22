@@ -60,7 +60,7 @@ Create a basic `Maven` project
 <dependency>
     <groupId>com.bladejava</groupId>
     <artifactId>blade-mvc</artifactId>
-    <version>2.0.6-Alpha1</version>
+    <version>2.0.6-Alpha2</version>
 </dependency>
 ```
 
@@ -69,7 +69,7 @@ Create a basic `Maven` project
 or `Gradle`:
 
 ```sh
-compile 'com.bladejava:blade-mvc:2.0.6-Alpha1'
+compile 'com.bladejava:blade-mvc:2.0.6-Alpha2'
 ```
 
 Write `main` method, try `Hello World`：
@@ -174,7 +174,7 @@ public static void main(String[] args) {
 
 ```java
 @PostRoute("/save")
-public void savePerson(@Param String username, @Parma Integer age){
+public void savePerson(@Param String username, @Param Integer age){
   System.out.println("username is:" + usernam + ", age is:" + age)
 }
 ```

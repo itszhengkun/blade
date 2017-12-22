@@ -6,6 +6,7 @@ import com.blade.mvc.WebContext;
 import com.blade.mvc.ui.ModelAndView;
 import com.blade.mvc.wrapper.OutputStreamWrapper;
 import com.blade.server.netty.HttpConst;
+import com.blade.server.netty.HttpServerHandler;
 import com.blade.server.netty.ProgressiveFutureListener;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
@@ -39,7 +40,6 @@ public class HttpResponse implements Response {
     private boolean               isCommit    = false;
     private ChannelHandlerContext ctx         = null;
     private CharSequence          contentType = null;
-    private CharSequence          dateString  = null;
 
     @Override
     public int statusCode() {
@@ -230,13 +230,13 @@ public class HttpResponse implements Response {
             ctx.write(response).addListener(ChannelFutureListener.CLOSE);
         } else {
             response.headers().set(HttpConst.CONNECTION, KEEP_ALIVE);
-            ctx.write(response, ctx.voidPromise());
+            ctx.writeAndFlush(response);
         }
         isCommit = true;
     }
 
     private HttpHeaders getDefaultHeader() {
-        headers.set(HttpConst.DATE, dateString);
+        headers.set(HttpConst.DATE, HttpServerHandler.date);
         headers.set(HttpConst.CONTENT_TYPE, HttpConst.getContentType(this.contentType));
         headers.set(HttpConst.X_POWER_BY, HttpConst.VERSION);
         if (!headers.contains(HttpConst.SERVER)) {
@@ -248,10 +248,9 @@ public class HttpResponse implements Response {
         return headers;
     }
 
-    public static HttpResponse build(ChannelHandlerContext ctx, CharSequence dateString) {
+    public static HttpResponse build(ChannelHandlerContext ctx) {
         HttpResponse httpResponse = new HttpResponse();
         httpResponse.ctx = ctx;
-        httpResponse.dateString = dateString;
         return httpResponse;
     }
 

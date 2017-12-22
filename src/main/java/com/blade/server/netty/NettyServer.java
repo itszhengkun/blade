@@ -17,6 +17,7 @@ import com.blade.kit.StringKit;
 import com.blade.mvc.Const;
 import com.blade.mvc.WebContext;
 import com.blade.mvc.annotation.Path;
+import com.blade.mvc.annotation.UrlPattern;
 import com.blade.mvc.handler.DefaultExceptionHandler;
 import com.blade.mvc.handler.ExceptionHandler;
 import com.blade.mvc.hook.WebHook;
@@ -41,11 +42,10 @@ import lombok.extern.slf4j.Slf4j;
 import java.io.File;
 import java.util.List;
 import java.util.Optional;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import java.util.stream.Stream;
 
 import static com.blade.mvc.Const.*;
+import static com.blade.server.netty.HttpConst.BUSINESS_THREAD_POOL;
 
 /**
  * @author biezhi
@@ -58,8 +58,6 @@ public class NettyServer implements Server {
     private Environment         environment;
     private EventLoopGroup      bossGroup;
     private EventLoopGroup      workerGroup;
-    private ExecutorService     bossExecutors;
-    private ExecutorService     workerExecutors;
     private int                 threadCount;
     private int                 workers;
     private int                 backlog;
@@ -150,16 +148,17 @@ public class NettyServer implements Server {
         // enable epoll
         if (BladeKit.epollIsAvailable()) {
             log.info("⬢ Use EpollEventLoopGroup");
+
             b.option(EpollChannelOption.SO_REUSEPORT, true);
 
-            NettyServerGroup nettyServerGroup = EpoolKit.group(threadCount, bossExecutors, workers, workerExecutors);
+            NettyServerGroup nettyServerGroup = EpollKit.group(threadCount, workers);
             this.bossGroup = nettyServerGroup.getBoosGroup();
             this.workerGroup = nettyServerGroup.getWorkerGroup();
             b.group(bossGroup, workerGroup).channel(nettyServerGroup.getSocketChannel());
         } else {
             log.info("⬢ Use NioEventLoopGroup");
-            this.bossGroup = new NioEventLoopGroup(threadCount, bossExecutors);
-            this.workerGroup = new NioEventLoopGroup(workers, workerExecutors);
+            this.bossGroup = new NioEventLoopGroup(threadCount, new NamedThreadFactory("nio-boss@"));
+            this.workerGroup = new NioEventLoopGroup(workers, new NamedThreadFactory("nio-worker@"));
             b.group(bossGroup, workerGroup).channel(NioServerSocketChannel.class);
         }
 
@@ -190,8 +189,14 @@ public class NettyServer implements Server {
             routeBuilder.addRouter(clazz, controller);
         }
         if (ReflectKit.hasInterface(clazz, WebHook.class) && null != clazz.getAnnotation(Bean.class)) {
-            Object hook = blade.ioc().getBean(clazz);
-            routeBuilder.addWebHook(clazz, hook);
+            Object     hook       = blade.ioc().getBean(clazz);
+            UrlPattern urlPattern = clazz.getAnnotation(UrlPattern.class);
+            if (null == urlPattern) {
+                routeBuilder.addWebHook(clazz, "/.*", hook);
+            } else {
+                Stream.of(urlPattern.values())
+                        .forEach(pattern -> routeBuilder.addWebHook(clazz, pattern, hook));
+            }
         }
         if (ReflectKit.hasInterface(clazz, BeanProcessor.class) && null != clazz.getAnnotation(Bean.class)) {
             this.processors.add((BeanProcessor) blade.ioc().getBean(clazz));
@@ -270,12 +275,6 @@ public class NettyServer implements Server {
         }
         DefaultEngine.TEMPLATE_PATH = templatePath;
 
-        String boosGroupName   = environment.get(ENV_KEY_NETTY_BOOS_GROUP_NAME, "pool");
-        String workerGroupName = environment.get(ENV_KEY_NETTY_WORKER_GROUP_NAME, "pool");
-
-        bossExecutors = Executors.newCachedThreadPool(new NamedThreadFactory("boss@" + boosGroupName));
-        workerExecutors = Executors.newCachedThreadPool(new NamedThreadFactory("worker@" + workerGroupName));
-
         threadCount = environment.getInt(ENV_KEY_NETTY_THREAD_COUNT, 1);
         workers = environment.getInt(ENV_KEY_NETTY_WORKERS, 0);
         backlog = environment.getInt(ENV_KEY_NETTY_SO_BACKLOG, 8192);
@@ -289,18 +288,9 @@ public class NettyServer implements Server {
     public void stop() {
         log.info("⬢ Blade shutdown ...");
         try {
-            if (this.bossGroup != null) {
-                this.bossGroup.shutdownGracefully();
-            }
-            if (this.workerGroup != null) {
-                this.workerGroup.shutdownGracefully();
-            }
-            if (bossExecutors != null) {
-                bossExecutors.shutdown();
-            }
-            if (workerExecutors != null) {
-                workerExecutors.shutdown();
-            }
+            this.bossGroup.shutdownGracefully();
+            this.workerGroup.shutdownGracefully();
+            BUSINESS_THREAD_POOL.shutdown();
             log.info("⬢ Blade shutdown successful");
         } catch (Exception e) {
             log.error("Blade shutdown error", e);
@@ -311,18 +301,9 @@ public class NettyServer implements Server {
     public void stopAndWait() {
         log.info("⬢ Blade shutdown ...");
         try {
-            if (this.bossGroup != null) {
-                this.bossGroup.shutdownGracefully().sync();
-            }
-            if (this.workerGroup != null) {
-                this.workerGroup.shutdownGracefully().sync();
-            }
-            if (bossExecutors != null) {
-                bossExecutors.shutdown();
-            }
-            if (workerExecutors != null) {
-                workerExecutors.shutdown();
-            }
+            this.bossGroup.shutdownGracefully().sync();
+            this.workerGroup.shutdownGracefully().sync();
+            BUSINESS_THREAD_POOL.shutdown();
             log.info("⬢ Blade shutdown successful");
         } catch (Exception e) {
             log.error("Blade shutdown error", e);
